@@ -7,10 +7,9 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import Map from '../components/Map';
-import { SearchResult, Intent, Place } from '../types';
-import { parseQueryGemini } from '../services/gemini';
-import { parseQueryLocal } from '../utils/parser';
-import { fetchOSMPlaces } from '../services/overpass';
+import { SearchResult, Place } from '../types';
+import { splitQueryGemini, splitQueryLocal } from '../services/queryParser';
+import { searchPlaces } from '../services/photon';
 import { optimizeRoutes } from '../utils/optimizer';
 
 const KM_TO_MI = 0.621371;
@@ -107,21 +106,28 @@ export default function Home() {
       setOverridePlaces({});
 
       try {
-        let intents: Intent[] = [];
+        let phrases: string[] = [];
         if (parsingMode === 'gemini' || (parsingMode === 'auto' && geminiApiKey)) {
-          try { intents = await parseQueryGemini(searchQuery, geminiApiKey); }
+          try { phrases = await splitQueryGemini(searchQuery, geminiApiKey); }
           catch {
             if (parsingMode === 'gemini') throw new Error(t('errorGemini'));
-            intents = parseQueryLocal(searchQuery);
+            phrases = splitQueryLocal(searchQuery);
           }
         } else {
-          intents = parseQueryLocal(searchQuery);
+          phrases = splitQueryLocal(searchQuery);
         }
 
-        if (intents.length === 0) throw new Error(t('errorEmpty'));
+        if (phrases.length === 0) throw new Error(t('errorEmpty'));
 
-        const places = await fetchOSMPlaces(intents, userLat, userLon, searchRadius * 1000);
-        const { routes, candidates } = optimizeRoutes(intents, places, userLat, userLon, maxCandidates);
+        const placesPerStop = await searchPlaces(phrases, userLat, userLon, searchRadius);
+
+        // Plain-language feedback: name exactly which stops we couldn't find.
+        const missing = phrases.filter((_, i) => placesPerStop[i].length === 0);
+        if (missing.length > 0) {
+          throw new Error(t('errorNotFound', { places: missing.join(', ') }));
+        }
+
+        const { routes, candidates } = optimizeRoutes(placesPerStop, userLat, userLon, maxCandidates);
 
         if (routes.length === 0) throw new Error(t('errorEmpty'));
 
@@ -132,13 +138,13 @@ export default function Home() {
         });
 
         window.history.replaceState(null, '', `?q=${encodeURIComponent(searchQuery)}`);
-        setResult({ intents, candidates, routes });
+        setResult({ phrases, candidates, routes });
         if (isMobile) setDrawerOpen(true);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : '';
         if (msg === 'RATE_LIMITED') setError(t('errorRateLimit'));
         else if (msg === 'TIMEOUT') setError(t('errorTimeout'));
-        else if (msg === 'OVERPASS_FAILED') setError(t('errorOverpass'));
+        else if (msg === 'SEARCH_FAILED') setError(t('errorSearch'));
         else setError(msg || t('errorEmpty'));
         if (isMobile) setDrawerOpen(true);
       } finally {
@@ -254,12 +260,12 @@ export default function Home() {
           </div>
         )}
 
-        {result && result.intents.length > 0 && (
+        {result && result.phrases.length > 0 && (
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-xs text-muted-foreground">{t('detectedIntents')}:</span>
-            {result.intents.map((intent, i) => (
+            {result.phrases.map((phrase, i) => (
               <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
-                {intent.brand ? `${intent.brand} ${intent.type}` : intent.type}
+                {phrase}
               </span>
             ))}
           </div>
@@ -334,10 +340,10 @@ export default function Home() {
 
                 {activeRoute.stops.map((stop, idx) => {
                   const isLast = idx === activeRoute.stops.length - 1;
-                  const intentKey = result.intents[idx] ? `${result.intents[idx].type}-${idx}` : null;
-                  const candidatesForStop = intentKey
-                    ? (result.candidates[intentKey] ?? []).filter((p) => p.id !== stop.place.id).slice(0, 3)
-                    : [];
+                  const stopKey = `stop-${idx}`;
+                  const candidatesForStop = (result.candidates[stopKey] ?? [])
+                    .filter((p) => p.id !== stop.place.id)
+                    .slice(0, 3);
                   const isCandidateOpen = openCandidateIdx === idx;
 
                   return (
