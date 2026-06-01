@@ -216,6 +216,14 @@ export default function Home() {
     setOpenCandidateIdx(null);
   }, [selectedRouteIndex]);
 
+  // vaul leaves `pointer-events: none` on <body> for a controlled non-modal
+  // drawer, which blocks the map (and its swap popups) behind the sheet. Keep
+  // the background interactive while the drawer is open.
+  useEffect(() => {
+    document.body.classList.toggle('cr-drawer-open', drawerOpen);
+    return () => document.body.classList.remove('cr-drawer-open');
+  }, [drawerOpen]);
+
   const baseRoute = result?.routes[selectedRouteIndex] ?? null;
   const activeRoute = baseRoute
     ? { ...baseRoute, stops: baseRoute.stops.map((stop, idx) => stopOverrides[idx] && overridePlaces[idx] ? { ...stop, place: overridePlaces[idx] } : stop) }

@@ -7,6 +7,14 @@ html, body {
   overflow-x: hidden;
 }
 
+/* Workaround for a vaul bug (#509/#534): a controlled, non-modal drawer leaves
+   `pointer-events: none` on <body>, blocking the map/popup behind the sheet.
+   For a non-modal drawer the background should stay interactive, so force it.
+   The stylesheet !important overrides vaul's inline style, even on re-apply. */
+body.cr-drawer-open {
+  pointer-events: auto !important;
+}
+
 /* Bouncy "found it" pop for candidate markers as they appear on the map. */
 @keyframes cr-candidate-pop {
   0%   { transform: scale(0);    opacity: 0; }
