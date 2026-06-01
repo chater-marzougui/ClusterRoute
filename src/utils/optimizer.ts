@@ -1,57 +1,47 @@
-import { Intent, Place, Route, RouteStop } from '../types';
+import { Place, Route, RouteStop } from '../types';
 import { haversineDistance } from './haversine';
-import { matchBrand } from './brandMatcher';
 
 // Helper to generate Cartesian product
 function cartesian<T>(arrays: T[][]): T[][] {
-  return arrays.reduce<T[][]>(
-    (a, b) => a.flatMap(d => b.map(e => [...d, e])),
-    [[]]
-  );
+  return arrays.reduce<T[][]>((a, b) => a.flatMap((d) => b.map((e) => [...d, e])), [[]]);
 }
 
 export function estimateTravelTime(distanceKm: number): { walkMin: number; driveMin: number } {
   return {
-    walkMin: Math.round(distanceKm / 5 * 60),
-    driveMin: Math.round(distanceKm / 30 * 60),
+    walkMin: Math.round((distanceKm / 5) * 60),
+    driveMin: Math.round((distanceKm / 30) * 60),
   };
 }
 
 export function optimizeRoutes(
-  intents: Intent[],
-  places: Place[],
+  candidatesPerStop: Place[][],
   userLat: number,
   userLon: number,
   maxCandidates: number = 10
-): { routes: Route[], candidates: Record<string, Place[]> } {
-  const MAX_CANDIDATES_PER_INTENT = Math.min(maxCandidates, intents.length >= 4 ? 5 : maxCandidates);
-  
+): { routes: Route[]; candidates: Record<string, Place[]> } {
+  const stopCount = candidatesPerStop.length;
+  // Candidate caps are load-bearing for performance — O(candidates^stops * stops!).
+  const MAX_CANDIDATES_PER_STOP = Math.min(maxCandidates, stopCount >= 4 ? 5 : maxCandidates);
+
   const candidates: Record<string, Place[]> = {};
   const candidateArrays: Place[][] = [];
 
-  for (let i = 0; i < intents.length; i++) {
-    const intent = intents[i];
-    const key = `${intent.type}-${i}`;
-    
-    // Filter matching type and brand
-    let matching = places.filter(p => p.type === intent.type && matchBrand(p, intent.brand || ''));
-    
-    // Sort by distance to user to get best candidates
-    matching.sort((a, b) => {
-      const distA = haversineDistance(userLat, userLon, a.lat, a.lon);
-      const distB = haversineDistance(userLat, userLon, b.lat, b.lon);
-      return distA - distB;
-    });
+  for (let i = 0; i < stopCount; i++) {
+    const sorted = [...candidatesPerStop[i]]
+      .sort(
+        (a, b) =>
+          haversineDistance(userLat, userLon, a.lat, a.lon) -
+          haversineDistance(userLat, userLon, b.lat, b.lon)
+      )
+      .slice(0, MAX_CANDIDATES_PER_STOP);
 
-    matching = matching.slice(0, MAX_CANDIDATES_PER_INTENT);
-    candidates[key] = matching;
-    
-    if (matching.length === 0) {
-      // Missing an intent category completely, can't complete route
+    candidates[`stop-${i}`] = sorted;
+
+    if (sorted.length === 0) {
+      // A stop with no candidates means the route can't be completed.
       return { routes: [], candidates };
     }
-    
-    candidateArrays.push(matching);
+    candidateArrays.push(sorted);
   }
 
   const combinations = cartesian(candidateArrays);
@@ -63,7 +53,7 @@ export function optimizeRoutes(
     let currLon = userLon;
     const stops: RouteStop[] = [];
 
-    // Strictly follow the order specified by the user's intents
+    // Strictly follow the order specified by the user's stops.
     for (const stopPlace of combo) {
       const d = haversineDistance(currLat, currLon, stopPlace.lat, stopPlace.lon);
       totalDist += d;
@@ -76,9 +66,6 @@ export function optimizeRoutes(
     allRoutes.push({ stops, totalDistance: totalDist });
   }
 
-  // Sort all completed routes by total distance
   allRoutes.sort((a, b) => a.totalDistance - b.totalDistance);
-
-  // Return top 5
   return { routes: allRoutes.slice(0, 5), candidates };
 }
