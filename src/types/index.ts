@@ -1,8 +1,3 @@
-export interface Intent {
-  type: string;
-  brand?: string;
-}
-
 export interface Place {
   id: string;
   name: string;
@@ -26,7 +21,7 @@ export interface Route {
 }
 
 export interface SearchResult {
-  intents: Intent[];
+  phrases: string[];
   candidates: Record<string, Place[]>;
   routes: Route[];
   error?: string;
