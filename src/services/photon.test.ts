@@ -119,4 +119,19 @@ describe('searchPlaces', () => {
     expect(results[0]).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(5); // initial + 4 doublings
   });
+
+  it('calls onResolved for each phrase as it settles (found and not found)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('bank')) return photonResponse([photonFeature('A Bank', 2.354, 48.857, 'bank')]);
+      return photonResponse([]);
+    }));
+
+    const events: { index: number; found: boolean }[] = [];
+    await searchPlaces(['bank', 'unicorn store'], USER.lat, USER.lon, 50, (index, places) => {
+      events.push({ index, found: places.length > 0 });
+    });
+
+    expect(events).toContainEqual({ index: 0, found: true });
+    expect(events).toContainEqual({ index: 1, found: false });
+  });
 });

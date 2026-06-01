@@ -24,6 +24,7 @@
   "errorGemini": "Gemini parsing failed.",
   "errorSearch": "Place search failed. Please try again.",
   "errorNotFound": "We couldn't find {{places}} near you — try a different name or a wider search radius.",
+  "partialNotice": "Couldn't find {{places}} — showing a route for the rest.",
   "errorEmpty": "No matching places found.",
   "route": "Route",
   "distance": "Distance",

@@ -24,6 +24,7 @@
   "errorGemini": "Échec de l'analyse Gemini.",
   "errorSearch": "La recherche de lieux a échoué. Veuillez réessayer.",
   "errorNotFound": "Nous n'avons pas trouvé {{places}} près de vous — essayez un autre nom ou un rayon plus large.",
+  "partialNotice": "Introuvable : {{places}} — itinéraire affiché pour le reste.",
   "errorEmpty": "Aucun lieu correspondant trouvé.",
   "route": "Itinéraire",
   "distance": "Distance",

@@ -50,11 +50,19 @@ const createStopIcon = (index: number, isLast: boolean) => new L.DivIcon({
 
 const createCandidateIcon = () => new L.DivIcon({
   className: 'bg-transparent border-0',
-  html: `<div style="width:14px;height:14px;border-radius:50%;background:#9ca3af;border:2px solid #fff;opacity:0.55;"></div>`,
+  html: `<div class="cr-candidate-pop" style="width:14px;height:14px;border-radius:50%;background:#9ca3af;border:2px solid #fff;opacity:0.6;"></div>`,
   iconSize: [14, 14],
   iconAnchor: [7, 7],
   popupAnchor: [0, -7],
 });
+
+// Single shared instance: a stable icon identity stops react-leaflet from
+// re-creating existing markers (which would replay the pop animation). New
+// markers still animate once when they mount.
+const CANDIDATE_ICON = createCandidateIcon();
+
+// Render at most this many gray option markers, for performance.
+const MAX_CANDIDATE_MARKERS = 300;
 
 // ---------------------------------------------------------------------------
 // FitBounds (unchanged)
@@ -142,7 +150,7 @@ export default function Map({
       }
     }
   }
-  const showCandidates = flatCandidates.length > 0 && flatCandidates.length <= 30;
+  const showCandidates = flatCandidates.length > 0;
 
   // Google Maps full-route URL
   const buildGoogleMapsRouteUrl = () => {
@@ -227,7 +235,7 @@ export default function Map({
       {/* ------------------------------------------------------------------ */}
       {/* Open full route in Google Maps — top-right (or top-left in RTL)      */}
       {/* ------------------------------------------------------------------ */}
-      {route && userLat && userLon && (
+      {!hideControls && route && userLat && userLon && (
         <div
           className={`absolute top-4 ${mapsLinkPosition} z-1000`}
         >
@@ -269,12 +277,12 @@ export default function Map({
           </Marker>
         )}
 
-        {/* Dim candidate markers (not in route) */}
-        {showCandidates && flatCandidates.map(place => (
+        {/* Dim candidate markers (swappable options not in the active route) */}
+        {showCandidates && flatCandidates.slice(0, MAX_CANDIDATE_MARKERS).map(place => (
           <Marker
             key={`cand-${place.id}`}
             position={[place.lat, place.lon]}
-            icon={createCandidateIcon()}
+            icon={CANDIDATE_ICON}
             opacity={0.5}
           >
             <Popup className="font-sans">

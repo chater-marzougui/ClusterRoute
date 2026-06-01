@@ -57,6 +57,8 @@ export default function Home() {
   const [openCandidateIdx, setOpenCandidateIdx] = useState<number | null>(null);
   const [stopOverrides, setStopOverrides] = useState<Record<number, string>>({});
   const [overridePlaces, setOverridePlaces] = useState<Record<number, Place>>({});
+  // Candidates revealed progressively on the map as each stop resolves (during search).
+  const [liveCandidates, setLiveCandidates] = useState<Record<string, Place[]>>({});
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const didAutoSearch = useRef(false);
@@ -90,8 +92,13 @@ export default function Home() {
   // --- read ?q= from URL on mount ---
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q');
-    if (q) setQuery(q);
+    if (q) updateQueryFromURL(q);
   }, []);
+
+  // --- Update query
+  function updateQueryFromURL(newQuery: string) {
+    setQuery(newQuery);
+  }
 
   // --- core search logic ---
   const runSearch = useCallback(
@@ -104,6 +111,7 @@ export default function Home() {
       setOpenCandidateIdx(null);
       setStopOverrides({});
       setOverridePlaces({});
+      setLiveCandidates({});
 
       try {
         let phrases: string[] = [];
@@ -119,15 +127,29 @@ export default function Home() {
 
         if (phrases.length === 0) throw new Error(t('errorEmpty'));
 
-        const placesPerStop = await searchPlaces(phrases, userLat, userLon, searchRadius);
+        // Reveal each stop's options on the map the moment it resolves.
+        const placesPerStop = await searchPlaces(
+          phrases, userLat, userLon, searchRadius,
+          (i, places) => {
+            if (places.length > 0) {
+              setLiveCandidates((prev) => ({ ...prev, [`live-${i}`]: places }));
+            }
+          }
+        );
 
-        // Plain-language feedback: name exactly which stops we couldn't find.
+        // Partial results: route over the stops we found, remember the rest.
+        const foundIndexes = phrases.map((_, i) => i).filter((i) => placesPerStop[i].length > 0);
         const missing = phrases.filter((_, i) => placesPerStop[i].length === 0);
-        if (missing.length > 0) {
+
+        // Only a hard failure if nothing at all was found.
+        if (foundIndexes.length === 0) {
           throw new Error(t('errorNotFound', { places: missing.join(', ') }));
         }
 
-        const { routes, candidates } = optimizeRoutes(placesPerStop, userLat, userLon, maxCandidates);
+        const foundPhrases = foundIndexes.map((i) => phrases[i]);
+        const foundPlaces = foundIndexes.map((i) => placesPerStop[i]);
+
+        const { routes, candidates } = optimizeRoutes(foundPlaces, userLat, userLon, maxCandidates);
 
         if (routes.length === 0) throw new Error(t('errorEmpty'));
 
@@ -138,7 +160,7 @@ export default function Home() {
         });
 
         window.history.replaceState(null, '', `?q=${encodeURIComponent(searchQuery)}`);
-        setResult({ phrases, candidates, routes });
+        setResult({ phrases, foundPhrases, missing, candidates, routes });
         if (isMobile) setDrawerOpen(true);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : '';
@@ -262,11 +284,29 @@ export default function Home() {
         {result && result.phrases.length > 0 && (
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-xs text-muted-foreground">{t('detectedIntents')}:</span>
-            {result.phrases.map((phrase, i) => (
-              <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
-                {phrase}
-              </span>
-            ))}
+            {result.phrases.map((phrase, i) => {
+              const isMissing = result.missing.includes(phrase);
+              return (
+                <span
+                  key={i}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    isMissing
+                      ? 'bg-muted text-muted-foreground line-through'
+                      : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300'
+                  }`}
+                >
+                  {phrase}
+                  {isMissing && <AlertCircle className="h-3 w-3" />}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {result && result.missing.length > 0 && (
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-md text-xs">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{t('partialNotice', { places: result.missing.join(', ') })}</span>
           </div>
         )}
       </div>
@@ -421,7 +461,7 @@ export default function Home() {
           userLat={userLat}
           userLon={userLon}
           route={activeRoute}
-          candidates={result?.candidates}
+          candidates={isLoading ? liveCandidates : result?.candidates}
           hideControls={overlayOpen || (isMobile && drawerOpen)}
         />
       </div>

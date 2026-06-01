@@ -191,11 +191,15 @@ export async function geocode(
 // MAX_RADIUS_DOUBLINGS times. Already-found phrases are not re-queried. Any
 // phrase still empty after the last attempt is left as [] (caller treats that
 // as "not found").
+// `onResolved` fires as soon as a phrase is settled — either found (non-empty)
+// or finally given up (empty after all expansions). This lets the UI update the
+// map progressively instead of waiting for every phrase to finish.
 export async function searchPlaces(
   phrases: string[],
   lat: number,
   lon: number,
-  radiusKm: number
+  radiusKm: number,
+  onResolved?: (index: number, places: Place[]) => void
 ): Promise<Place[][]> {
   const results: Place[][] = phrases.map(() => []);
   let radius = radiusKm;
@@ -206,15 +210,22 @@ export async function searchPlaces(
       .filter((i) => i >= 0);
     if (pending.length === 0) break;
 
-    const fetched = await Promise.all(
-      pending.map((i) => geocode(phrases[i], lat, lon, radius))
+    await Promise.all(
+      pending.map((i) =>
+        geocode(phrases[i], lat, lon, radius).then((places) => {
+          results[i] = places;
+          if (places.length > 0) onResolved?.(i, places); // found — reveal on map now
+        })
+      )
     );
-    pending.forEach((i, k) => {
-      results[i] = fetched[k];
-    });
 
     radius *= 2;
   }
+
+  // Notify for phrases that never resolved, so the UI can mark them "not found".
+  results.forEach((places, i) => {
+    if (places.length === 0) onResolved?.(i, []);
+  });
 
   return results;
 }
