@@ -47,6 +47,28 @@ describe('geocode', () => {
     await expect(geocode('cafe', USER.lat, USER.lon, 50)).rejects.toThrow('RATE_LIMITED');
     expect(fetchMock).toHaveBeenCalledTimes(1); // no retry, no fallback
   });
+
+  it('constrains the query with a bbox', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return photonResponse([]);
+    }));
+    await geocode('cafe', USER.lat, USER.lon, 10);
+    expect(urls[0]).toContain('bbox=');
+  });
+
+  it('adds an osm_tag filter for category words but not for brand names', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return photonResponse([]);
+    }));
+    await geocode('bank', USER.lat, USER.lon, 10);
+    await geocode('Starbucks', USER.lat, USER.lon, 10);
+    expect(urls[0]).toContain('osm_tag=amenity%3Abank');
+    expect(urls[1]).not.toContain('osm_tag');
+  });
 });
 
 describe('searchPlaces', () => {
@@ -60,5 +82,30 @@ describe('searchPlaces', () => {
     expect(results).toHaveLength(2);
     expect(results[0]).toHaveLength(1);
     expect(results[1]).toEqual([]); // empty marks a failed phrase
+  });
+
+  it('doubles the radius and retries until a phrase is found', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(String(url));
+      // First two attempts find nothing; the third (larger bbox) succeeds.
+      if (calls.length >= 3) {
+        return photonResponse([photonFeature('Late Cafe', 2.353, 48.857)]);
+      }
+      return photonResponse([]);
+    }));
+
+    const results = await searchPlaces(['cafe'], USER.lat, USER.lon, 10);
+    expect(results[0]).toHaveLength(1);
+    expect(calls.length).toBe(3); // retried twice before the hit
+  });
+
+  it('gives up with an empty result after the maximum number of attempts', async () => {
+    const fetchMock = vi.fn(async () => photonResponse([]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const results = await searchPlaces(['nowhere place'], USER.lat, USER.lon, 10);
+    expect(results[0]).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(5); // initial + 4 doublings
   });
 });

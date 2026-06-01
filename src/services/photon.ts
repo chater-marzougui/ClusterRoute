@@ -1,5 +1,6 @@
 import { Place } from '../types';
 import { haversineDistance } from '../utils/haversine';
+import { categoryTagFor } from '../utils/categoryTags';
 
 // Provider endpoints kept as single swappable constants (self-hosting later = one-line change).
 export const PHOTON_BASE_URL = 'https://photon.komoot.io/api';
@@ -7,6 +8,16 @@ export const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org/search';
 
 const REQUEST_TIMEOUT_MS = 8000;
 const RESULT_LIMIT = 15;
+// Initial attempt + this many radius doublings before declaring "not found".
+const MAX_RADIUS_DOUBLINGS = 4;
+
+// Axis-aligned bounding box around a point, as Photon expects it:
+// "minLon,minLat,maxLon,maxLat". ~111 km per degree of latitude.
+function bbox(lat: number, lon: number, radiusKm: number): string {
+  const dLat = radiusKm / 111;
+  const dLon = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
+  return `${lon - dLon},${lat - dLat},${lon + dLon},${lat + dLat}`;
+}
 
 async function fetchWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
@@ -77,8 +88,25 @@ function mapPhoton(data: unknown, phrase: string): Place[] {
   return places;
 }
 
-async function photonGeocode(phrase: string, lat: number, lon: number): Promise<Place[]> {
-  const url = `${PHOTON_BASE_URL}?q=${encodeURIComponent(phrase)}&lat=${lat}&lon=${lon}&limit=${RESULT_LIMIT}`;
+async function photonGeocode(
+  phrase: string,
+  lat: number,
+  lon: number,
+  radiusKm: number
+): Promise<Place[]> {
+  const params = new URLSearchParams({
+    q: phrase,
+    lat: String(lat),
+    lon: String(lon),
+    limit: String(RESULT_LIMIT),
+    bbox: bbox(lat, lon, radiusKm), // hard area constraint (lat/lon alone is only a bias)
+  });
+  // Generic category words ("bank", "supermarket") get an osm_tag filter so we
+  // match real POIs of that category instead of places merely named that way.
+  const tag = categoryTagFor(phrase);
+  if (tag) params.append('osm_tag', tag);
+
+  const url = `${PHOTON_BASE_URL}?${params.toString()}`;
   return mapPhoton(await requestJson(url), phrase);
 }
 
@@ -132,7 +160,7 @@ export async function geocode(
   radiusKm: number
 ): Promise<Place[]> {
   try {
-    return sortAndFilter(await photonGeocode(phrase, lat, lon), lat, lon, radiusKm);
+    return sortAndFilter(await photonGeocode(phrase, lat, lon, radiusKm), lat, lon, radiusKm);
   } catch (err) {
     if (err instanceof Error && err.message === 'RATE_LIMITED') throw err;
     try {
@@ -143,12 +171,35 @@ export async function geocode(
   }
 }
 
-// Geocode every phrase in parallel; returns Place[][] aligned by index with `phrases`.
+// Geocode every phrase, returning Place[][] aligned by index with `phrases`.
+// Phrases that come back empty are retried with the radius doubled, up to
+// MAX_RADIUS_DOUBLINGS times. Already-found phrases are not re-queried. Any
+// phrase still empty after the last attempt is left as [] (caller treats that
+// as "not found").
 export async function searchPlaces(
   phrases: string[],
   lat: number,
   lon: number,
   radiusKm: number
 ): Promise<Place[][]> {
-  return Promise.all(phrases.map((phrase) => geocode(phrase, lat, lon, radiusKm)));
+  const results: Place[][] = phrases.map(() => []);
+  let radius = radiusKm;
+
+  for (let attempt = 0; attempt <= MAX_RADIUS_DOUBLINGS; attempt++) {
+    const pending = results
+      .map((places, i) => (places.length === 0 ? i : -1))
+      .filter((i) => i >= 0);
+    if (pending.length === 0) break;
+
+    const fetched = await Promise.all(
+      pending.map((i) => geocode(phrases[i], lat, lon, radius))
+    );
+    pending.forEach((i, k) => {
+      results[i] = fetched[k];
+    });
+
+    radius *= 2;
+  }
+
+  return results;
 }
