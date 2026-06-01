@@ -31,12 +31,21 @@ const CATEGORY_TAGS: { keywords: string[]; tag: string }[] = [
   { keywords: ['laundry', 'laundromat'], tag: 'shop:laundry' },
 ];
 
-// Returns a Photon osm_tag string (e.g. "amenity:bank") if the phrase looks like
-// a known category, otherwise null (caller should do a plain free-text search).
-export function categoryTagFor(phrase: string): string | null {
+// Returns the matched osm_tag and the keyword that triggered it, or null when
+// the phrase has no known category word. The caller strips `keyword` from the
+// text query so a brand+category phrase like "TD bank" searches for "TD" within
+// amenity:bank, instead of the literal text "TD bank" (which misses branches
+// named "TD" or "TD Canada Trust").
+export function categoryMatch(phrase: string): { tag: string; keyword: string } | null {
   const p = phrase.toLowerCase();
   for (const { keywords, tag } of CATEGORY_TAGS) {
-    if (keywords.some((k) => p.includes(k))) return tag;
+    const keyword = keywords.find((k) => p.includes(k));
+    if (keyword) return { tag, keyword };
   }
   return null;
+}
+
+// Convenience wrapper: just the osm_tag string (e.g. "amenity:bank"), or null.
+export function categoryTagFor(phrase: string): string | null {
+  return categoryMatch(phrase)?.tag ?? null;
 }

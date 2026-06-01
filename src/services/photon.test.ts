@@ -69,6 +69,17 @@ describe('geocode', () => {
     expect(urls[0]).toContain('osm_tag=amenity%3Abank');
     expect(urls[1]).not.toContain('osm_tag');
   });
+
+  it('strips the category word from a brand+category query but keeps the osm_tag', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return photonResponse([]);
+    }));
+    await geocode('TD bank', USER.lat, USER.lon, 10);
+    expect(urls[0]).toContain('q=TD&'); // "bank" stripped from the text query
+    expect(urls[0]).toContain('osm_tag=amenity%3Abank');
+  });
 });
 
 describe('searchPlaces', () => {

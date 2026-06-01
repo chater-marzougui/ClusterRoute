@@ -1,13 +1,16 @@
 import { Place } from '../types';
 import { haversineDistance } from '../utils/haversine';
-import { categoryTagFor } from '../utils/categoryTags';
+import { categoryMatch } from '../utils/categoryTags';
 
 // Provider endpoints kept as single swappable constants (self-hosting later = one-line change).
 export const PHOTON_BASE_URL = 'https://photon.komoot.io/api';
 export const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org/search';
 
 const REQUEST_TIMEOUT_MS = 8000;
-const RESULT_LIMIT = 15;
+// Generous limit so nearby branches aren't truncated before our distance sort.
+const RESULT_LIMIT = 40;
+// Low value tells Photon to favour proximity over global prominence (0..1, default 0.4).
+const LOCATION_BIAS_SCALE = '0.1';
 // Initial attempt + this many radius doublings before declaring "not found".
 const MAX_RADIUS_DOUBLINGS = 4;
 
@@ -88,23 +91,35 @@ function mapPhoton(data: unknown, phrase: string): Place[] {
   return places;
 }
 
+// Strips the matched category keyword from the phrase so a brand+category query
+// ("TD bank") searches for the distinguishing part ("TD") within the osm_tag
+// filter. Falls back to the full phrase when nothing distinctive remains
+// ("bank" -> "bank", "coffee" -> "coffee").
+function queryTextFor(phrase: string, keyword: string | null): string {
+  if (!keyword) return phrase;
+  const stripped = phrase.replace(new RegExp(keyword, 'ig'), '').replace(/\s+/g, ' ').trim();
+  return stripped.length > 0 ? stripped : phrase;
+}
+
 async function photonGeocode(
   phrase: string,
   lat: number,
   lon: number,
   radiusKm: number
 ): Promise<Place[]> {
+  // Generic category words ("bank", "supermarket") get an osm_tag filter so we
+  // match real POIs of that category instead of places merely named that way.
+  const match = categoryMatch(phrase);
+
   const params = new URLSearchParams({
-    q: phrase,
+    q: queryTextFor(phrase, match?.keyword ?? null),
     lat: String(lat),
     lon: String(lon),
     limit: String(RESULT_LIMIT),
     bbox: bbox(lat, lon, radiusKm), // hard area constraint (lat/lon alone is only a bias)
+    location_bias_scale: LOCATION_BIAS_SCALE,
   });
-  // Generic category words ("bank", "supermarket") get an osm_tag filter so we
-  // match real POIs of that category instead of places merely named that way.
-  const tag = categoryTagFor(phrase);
-  if (tag) params.append('osm_tag', tag);
+  if (match) params.append('osm_tag', match.tag);
 
   const url = `${PHOTON_BASE_URL}?${params.toString()}`;
   return mapPhoton(await requestJson(url), phrase);
