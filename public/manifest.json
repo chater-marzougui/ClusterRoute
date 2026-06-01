@@ -1,0 +1,20 @@
+{
+  "name": "ClusterRoute",
+  "short_name": "ClusterRoute",
+  "description": "Find the shortest route through multiple nearby places.",
+  "start_url": "/ClusterRoute/",
+  "scope": "/ClusterRoute/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/ClusterRoute/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["navigation", "travel", "utilities"]
+}

@@ -1,9 +1,33 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { Plus, Minus, Locate, Map as MapIcon, Globe, Moon } from 'lucide-react';
 import { Place, Route } from '../types';
+import { useTranslation } from 'react-i18next';
 
-// Custom DivIcons using Lucide HTML logic via tailwind classes
+// ---------------------------------------------------------------------------
+// Tile layer config
+// ---------------------------------------------------------------------------
+type MapStyle = 'street' | 'satellite' | 'dark';
+
+const TILE_LAYERS: Record<MapStyle, { url: string; attribution: string }> = {
+  street: {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+  },
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Icon creators (unchanged)
+// ---------------------------------------------------------------------------
 const createUserIcon = () => new L.DivIcon({
   className: 'bg-transparent border-0',
   html: `<div class="relative flex h-5 w-5 items-center justify-center">
@@ -21,17 +45,27 @@ const createStopIcon = (index: number, isLast: boolean) => new L.DivIcon({
         </div>`,
   iconSize: [32, 32],
   iconAnchor: [16, 16],
-  popupAnchor: [0, -16]
+  popupAnchor: [0, -16],
 });
 
-// Component to auto-fit bounds
+const createCandidateIcon = () => new L.DivIcon({
+  className: 'bg-transparent border-0',
+  html: `<div style="width:14px;height:14px;border-radius:50%;background:#9ca3af;border:2px solid #fff;opacity:0.55;"></div>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+  popupAnchor: [0, -7],
+});
+
+// ---------------------------------------------------------------------------
+// FitBounds (unchanged)
+// ---------------------------------------------------------------------------
 function FitBounds({ route, userLat, userLon }: { route: Route | null; userLat: number | null; userLon: number | null }) {
   const map = useMap();
   useEffect(() => {
     if (route && route.stops.length > 0 && userLat && userLon) {
       const points: L.LatLngExpression[] = [
         [userLat, userLon],
-        ...route.stops.map(s => [s.place.lat, s.place.lon] as L.LatLngExpression)
+        ...route.stops.map(s => [s.place.lat, s.place.lon] as L.LatLngExpression),
       ];
       map.fitBounds(L.latLngBounds(points), { padding: [50, 50] });
     } else if (userLat && userLon) {
@@ -41,68 +75,259 @@ function FitBounds({ route, userLat, userLon }: { route: Route | null; userLat: 
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Remove the default Leaflet zoom control
+// ---------------------------------------------------------------------------
+function HideDefaultZoom() {
+  const map = useMap();
+  useEffect(() => {
+    if (map.zoomControl) map.zoomControl.remove();
+  }, [map]);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Expose the Leaflet map instance to the parent component
+// ---------------------------------------------------------------------------
+function MapController({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Map component
+// ---------------------------------------------------------------------------
 export default function Map({
   userLat,
   userLon,
-  route
+  route,
+  candidates,
+  hideControls = false,
 }: {
   userLat: number | null;
   userLon: number | null;
   route: Route | null;
   candidates?: Record<string, Place[]>;
+  hideControls?: boolean;
 }) {
-  const defaultCenter: L.LatLngExpression = [48.8566, 2.3522]; // Paris default
+  const [mapStyle, setMapStyle] = useState<MapStyle>('street');
+  const [leafletMap, setLeafletMap] = useState<L.Map | null>(null);
+  const { t } = useTranslation();
 
-  // Compute polyline positions
+  const handleMapReady = useCallback((map: L.Map) => {
+    setLeafletMap(map);
+  }, []);
+
+  const isRtl = document.documentElement.dir === 'rtl';
+
+  const defaultCenter: L.LatLngExpression = [48.8566, 2.3522];
+
+  // Polyline positions
   const polylinePositions: L.LatLngExpression[] = [];
   if (route && userLat && userLon) {
     polylinePositions.push([userLat, userLon]);
     route.stops.forEach(stop => polylinePositions.push([stop.place.lat, stop.place.lon]));
   }
 
+  // Candidate places not already in route
+  const routeIds = new Set(route?.stops.map(s => s.place.id) ?? []);
+  const flatCandidates: Place[] = [];
+  if (candidates) {
+    for (const places of Object.values(candidates)) {
+      for (const p of places) {
+        if (!routeIds.has(p.id)) flatCandidates.push(p);
+      }
+    }
+  }
+  const showCandidates = flatCandidates.length > 0 && flatCandidates.length <= 30;
+
+  // Google Maps full-route URL
+  const buildGoogleMapsRouteUrl = () => {
+    if (!route || !userLat || !userLon) return '#';
+    const waypoints = route.stops.map(s => `${s.place.lat},${s.place.lon}`).join('/');
+    return `https://www.google.com/maps/dir/${userLat},${userLon}/${waypoints}`;
+  };
+
+  const tileConfig = TILE_LAYERS[mapStyle];
+
+  // Panel and "Open in Maps" positions based on RTL
+  const panelPosition = isRtl ? 'left-2' : 'right-2';
+  const mapsLinkPosition = isRtl ? 'left-4' : 'right-4';
+
+  // Shared button classes
+  const btnBase = 'h-10 w-10 flex items-center justify-center text-xs font-semibold transition-colors';
+  const btnInactive = 'bg-card text-foreground hover:bg-muted';
+
   return (
-    <MapContainer 
-      center={userLat && userLon ? [userLat, userLon] : defaultCenter} 
-      zoom={13} 
-      className="w-full h-full min-h-[400px] z-0"
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      
-      {userLat && userLon && (
-        <Marker position={[userLat, userLon]} icon={createUserIcon()}>
-          <Popup>You are here</Popup>
-        </Marker>
+    <div className="relative w-full h-full min-h-100">
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Unified Google Maps-style control panel — bottom-right (or left RTL) */}
+      {/* Hidden on mobile when the bottom sheet is open                      */}
+      {/* ------------------------------------------------------------------ */}
+      {!hideControls && <div
+        className={`absolute bottom-6 ${panelPosition} z-1000 flex flex-col rounded-xl overflow-hidden shadow-lg border border-gray-200 dark:border-gray-700`}
+      >
+        {/* Zoom In */}
+        <button
+          className={`${btnBase} ${btnInactive}`}
+          onClick={() => leafletMap?.zoomIn()}
+          title="Zoom in"
+          aria-label="Zoom in"
+        >
+          <Plus size={16} />
+        </button>
+
+        {/* Zoom Out */}
+        <button
+          className={`${btnBase} ${btnInactive} border-t border-gray-200 dark:border-gray-600`}
+          onClick={() => leafletMap?.zoomOut()}
+          title="Zoom out"
+          aria-label="Zoom out"
+        >
+          <Minus size={16} />
+        </button>
+
+        {/* Center on my location */}
+        <button
+          className={`${btnBase} ${btnInactive} border-t border-gray-200 dark:border-gray-600`}
+          onClick={() => {
+            if (leafletMap && userLat && userLon) {
+              leafletMap.setView([userLat, userLon], 15);
+            }
+          }}
+          title="Center on my location"
+          aria-label="Center on my location"
+        >
+          <Locate size={16} />
+        </button>
+
+        {/* Cycle map style — single button, icon shows next style */}
+        {(() => {
+          const CYCLE: MapStyle[] = ['street', 'satellite', 'dark'];
+          const ICONS = { street: MapIcon, satellite: Globe, dark: Moon };
+          const TITLES = { street: 'Street', satellite: 'Satellite', dark: 'Dark' };
+          const NextIcon = ICONS[mapStyle];
+          return (
+            <button
+              className={`${btnBase} border-t border-gray-200 dark:border-gray-600 ${btnInactive}`}
+              onClick={() => setMapStyle(CYCLE[(CYCLE.indexOf(mapStyle) + 1) % CYCLE.length])}
+              title={`Map: ${TITLES[mapStyle]}`}
+              aria-label={`Map style: ${TITLES[mapStyle]}`}
+            >
+              <NextIcon size={16} />
+            </button>
+          );
+        })()}
+      </div>}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Open full route in Google Maps — top-right (or top-left in RTL)      */}
+      {/* ------------------------------------------------------------------ */}
+      {route && userLat && userLon && (
+        <div
+          className={`absolute top-4 ${mapsLinkPosition} z-1000`}
+        >
+          <a
+            href={buildGoogleMapsRouteUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors min-h-9"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+            </svg>
+            {t('openFullRoute')}
+          </a>
+        </div>
       )}
 
-      {route && route.stops.map((stop, index) => {
-        const isLast = index === route.stops.length - 1;
-        return (
-          <Marker 
-            key={stop.place.id} 
-            position={[stop.place.lat, stop.place.lon]}
-            icon={createStopIcon(index, isLast)}
+      {/* ------------------------------------------------------------------ */}
+      {/* The actual Leaflet map                                              */}
+      {/* ------------------------------------------------------------------ */}
+      <MapContainer
+        center={userLat && userLon ? [userLat, userLon] : defaultCenter}
+        zoom={13}
+        className="w-full h-full min-h-100 z-0"
+        style={{ height: '100%', minHeight: '400px' }}
+        zoomControl={false}
+      >
+        {/* Conditionally rendered TileLayer based on mapStyle state */}
+        <TileLayer
+          key={mapStyle}
+          attribution={tileConfig.attribution}
+          url={tileConfig.url}
+        />
+
+        {/* User location marker */}
+        {userLat && userLon && (
+          <Marker position={[userLat, userLon]} icon={createUserIcon()}>
+            <Popup>You are here</Popup>
+          </Marker>
+        )}
+
+        {/* Dim candidate markers (not in route) */}
+        {showCandidates && flatCandidates.map(place => (
+          <Marker
+            key={`cand-${place.id}`}
+            position={[place.lat, place.lon]}
+            icon={createCandidateIcon()}
+            opacity={0.5}
           >
             <Popup className="font-sans">
-              <div className="font-bold">{stop.place.name}</div>
-              <div className="text-xs text-muted-foreground uppercase">{stop.place.type}</div>
-              {stop.place.brand && <div className="text-xs">{stop.place.brand}</div>}
-              <div className="text-xs mt-1">From previous: {stop.distanceFromPrevious.toFixed(1)} km</div>
+              <div className="font-semibold text-sm">{place.name}</div>
+              <div className="text-xs text-gray-500 uppercase">{place.type}</div>
+              {place.brand && <div className="text-xs text-gray-500">{place.brand}</div>}
             </Popup>
           </Marker>
-        );
-      })}
+        ))}
 
-      {route && (
-        <Polyline 
-          positions={polylinePositions} 
-          pathOptions={{ color: '#4f46e5', weight: 4, opacity: 0.8, dashArray: '10, 10' }} 
-        />
-      )}
+        {/* Route stop markers */}
+        {route && route.stops.map((stop, index) => {
+          const isLast = index === route.stops.length - 1;
+          const googleNavUrl = `https://maps.google.com/?q=${stop.place.lat},${stop.place.lon}`;
+          return (
+            <Marker
+              key={stop.place.id}
+              position={[stop.place.lat, stop.place.lon]}
+              icon={createStopIcon(index, isLast)}
+            >
+              <Popup className="font-sans">
+                <div className="font-bold">{stop.place.name}</div>
+                <div className="text-xs text-gray-500 uppercase">{stop.place.type}</div>
+                {stop.place.brand && <div className="text-xs">{stop.place.brand}</div>}
+                <div className="text-xs mt-1">From previous: {stop.distanceFromPrevious.toFixed(1)} km</div>
+                {stop.walkMin > 0 && (
+                  <div className="text-xs">Walk: {stop.walkMin} min · Drive: {stop.driveMin} min</div>
+                )}
+                <a
+                  href={googleNavUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 block w-full text-center rounded bg-indigo-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
+                >
+                  Navigate
+                </a>
+              </Popup>
+            </Marker>
+          );
+        })}
 
-      <FitBounds route={route} userLat={userLat} userLon={userLon} />
-    </MapContainer>
+        {/* Route polyline */}
+        {route && (
+          <Polyline
+            positions={polylinePositions}
+            pathOptions={{ color: '#4f46e5', weight: 4, opacity: 0.8, dashArray: '10, 10' }}
+          />
+        )}
+
+        <FitBounds route={route} userLat={userLat} userLon={userLon} />
+        <HideDefaultZoom />
+        <MapController onReady={handleMapReady} />
+      </MapContainer>
+    </div>
   );
 }

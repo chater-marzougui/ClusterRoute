@@ -16,6 +16,8 @@ export interface Place {
 export interface RouteStop {
   place: Place;
   distanceFromPrevious: number; // in km
+  walkMin: number;
+  driveMin: number;
 }
 
 export interface Route {
@@ -35,4 +37,7 @@ export interface Settings {
   language: 'en' | 'fr' | 'ar';
   geminiApiKey: string;
   parsingMode: 'auto' | 'gemini' | 'local';
+  searchRadius: number;
+  maxCandidates: number;
+  distanceUnit: 'km' | 'mi';
 }

@@ -2,20 +2,6 @@ import { Intent, Place, Route, RouteStop } from '../types';
 import { haversineDistance } from './haversine';
 import { matchBrand } from './brandMatcher';
 
-// Helper to generate all permutations of an array
-function permute<T>(arr: T[]): T[][] {
-  if (arr.length === 0) return [[]];
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i++) {
-    const rest = arr.slice(0, i).concat(arr.slice(i + 1));
-    const restPerms = permute(rest);
-    for (const p of restPerms) {
-      result.push([arr[i], ...p]);
-    }
-  }
-  return result;
-}
-
 // Helper to generate Cartesian product
 function cartesian<T>(arrays: T[][]): T[][] {
   return arrays.reduce<T[][]>(
@@ -24,13 +10,21 @@ function cartesian<T>(arrays: T[][]): T[][] {
   );
 }
 
+export function estimateTravelTime(distanceKm: number): { walkMin: number; driveMin: number } {
+  return {
+    walkMin: Math.round(distanceKm / 5 * 60),
+    driveMin: Math.round(distanceKm / 30 * 60),
+  };
+}
+
 export function optimizeRoutes(
   intents: Intent[],
   places: Place[],
   userLat: number,
-  userLon: number
+  userLon: number,
+  maxCandidates: number = 10
 ): { routes: Route[], candidates: Record<string, Place[]> } {
-  const MAX_CANDIDATES_PER_INTENT = intents.length >= 4 ? 5 : 10;
+  const MAX_CANDIDATES_PER_INTENT = Math.min(maxCandidates, intents.length >= 4 ? 5 : maxCandidates);
   
   const candidates: Record<string, Place[]> = {};
   const candidateArrays: Place[][] = [];
@@ -73,7 +67,8 @@ export function optimizeRoutes(
     for (const stopPlace of combo) {
       const d = haversineDistance(currLat, currLon, stopPlace.lat, stopPlace.lon);
       totalDist += d;
-      stops.push({ place: stopPlace, distanceFromPrevious: d });
+      const { walkMin, driveMin } = estimateTravelTime(d);
+      stops.push({ place: stopPlace, distanceFromPrevious: d, walkMin, driveMin });
       currLat = stopPlace.lat;
       currLon = stopPlace.lon;
     }
