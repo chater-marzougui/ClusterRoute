@@ -463,6 +463,7 @@ export default function Home() {
           route={activeRoute}
           candidates={isLoading ? liveCandidates : result?.candidates}
           hideControls={overlayOpen || (isMobile && drawerOpen)}
+          onSwapCandidate={handleUseCandidate}
         />
       </div>
 

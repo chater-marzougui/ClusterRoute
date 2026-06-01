@@ -32,6 +32,7 @@
   "total": "الإجمالي",
   "start": "البداية",
   "end": "النهاية",
+  "stop": "محطة",
   "searchHistory": "سجل البحث",
   "clearHistory": "مسح",
   "detectedIntents": "مكتشف",

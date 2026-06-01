@@ -32,6 +32,7 @@
   "total": "Total",
   "start": "Start",
   "end": "End",
+  "stop": "Stop",
   "searchHistory": "Search History",
   "clearHistory": "Clear",
   "detectedIntents": "Detected",

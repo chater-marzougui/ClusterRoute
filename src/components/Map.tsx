@@ -48,18 +48,24 @@ const createStopIcon = (index: number, isLast: boolean) => new L.DivIcon({
   popupAnchor: [0, -16],
 });
 
-const createCandidateIcon = () => new L.DivIcon({
-  className: 'bg-transparent border-0',
-  html: `<div class="cr-candidate-pop" style="width:14px;height:14px;border-radius:50%;background:#9ca3af;border:2px solid #fff;opacity:0.6;"></div>`,
-  iconSize: [14, 14],
-  iconAnchor: [7, 7],
-  popupAnchor: [0, -7],
-});
-
-// Single shared instance: a stable icon identity stops react-leaflet from
-// re-creating existing markers (which would replay the pop animation). New
-// markers still animate once when they mount.
-const CANDIDATE_ICON = createCandidateIcon();
+// Candidate (swappable option) marker, labelled with the stop number it belongs
+// to. Icons are cached per number so their identity stays stable — that stops
+// react-leaflet from re-creating existing markers (which would replay the pop
+// animation); newly added markers still animate once when they mount.
+const candidateIconCache: Record<number, L.DivIcon> = {};
+const candidateIcon = (stopNumber: number): L.DivIcon => {
+  const cached = candidateIconCache[stopNumber];
+  if (cached) return cached;
+  const icon = new L.DivIcon({
+    className: 'bg-transparent border-0',
+    html: `<div class="cr-candidate-pop flex items-center justify-center" style="width:24px;height:24px;border-radius:50%;background:#0009af;border:2px solid #fff;opacity:0.85;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.35);">${stopNumber}</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12],
+  });
+  candidateIconCache[stopNumber] = icon;
+  return icon;
+};
 
 // Render at most this many gray option markers, for performance.
 const MAX_CANDIDATE_MARKERS = 300;
@@ -114,12 +120,14 @@ export default function Map({
   route,
   candidates,
   hideControls = false,
+  onSwapCandidate,
 }: {
   userLat: number | null;
   userLon: number | null;
   route: Route | null;
   candidates?: Record<string, Place[]>;
   hideControls?: boolean;
+  onSwapCandidate?: (stopIndex: number, place: Place) => void;
 }) {
   const [mapStyle, setMapStyle] = useState<MapStyle>('street');
   const [leafletMap, setLeafletMap] = useState<L.Map | null>(null);
@@ -140,13 +148,16 @@ export default function Map({
     route.stops.forEach(stop => polylinePositions.push([stop.place.lat, stop.place.lon]));
   }
 
-  // Candidate places not already in route
+  // Candidate places not already in route, tagged with the stop index they
+  // belong to (parsed from the "stop-0" / "live-0" key) so the marker can show
+  // the stop number and the popup can swap that specific stop.
   const routeIds = new Set(route?.stops.map(s => s.place.id) ?? []);
-  const flatCandidates: Place[] = [];
+  const flatCandidates: { place: Place; stopIndex: number }[] = [];
   if (candidates) {
-    for (const places of Object.values(candidates)) {
+    for (const [key, places] of Object.entries(candidates)) {
+      const stopIndex = parseInt(key.split('-')[1] ?? '0', 10) || 0;
       for (const p of places) {
-        if (!routeIds.has(p.id)) flatCandidates.push(p);
+        if (!routeIds.has(p.id)) flatCandidates.push({ place: p, stopIndex });
       }
     }
   }
@@ -277,18 +288,30 @@ export default function Map({
           </Marker>
         )}
 
-        {/* Dim candidate markers (swappable options not in the active route) */}
-        {showCandidates && flatCandidates.slice(0, MAX_CANDIDATE_MARKERS).map(place => (
+        {/* Candidate markers (swappable options not in the active route) */}
+        {showCandidates && flatCandidates.slice(0, MAX_CANDIDATE_MARKERS).map(({ place, stopIndex }) => (
           <Marker
             key={`cand-${place.id}`}
             position={[place.lat, place.lon]}
-            icon={CANDIDATE_ICON}
-            opacity={0.5}
+            icon={candidateIcon(stopIndex + 1)}
+            opacity={0.85}
           >
             <Popup className="font-sans">
+              <div className="text-[10px] font-semibold uppercase text-indigo-600">
+                {t('stop')} {stopIndex + 1}
+              </div>
               <div className="font-semibold text-sm">{place.name}</div>
               <div className="text-xs text-gray-500 uppercase">{place.type}</div>
               {place.brand && <div className="text-xs text-gray-500">{place.brand}</div>}
+              {onSwapCandidate && route && (
+                <button
+                  type="button"
+                  onClick={() => onSwapCandidate(stopIndex, place)}
+                  className="mt-2 block w-full text-center rounded bg-indigo-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
+                >
+                  {t('swapStop')}
+                </button>
+              )}
             </Popup>
           </Marker>
         ))}
