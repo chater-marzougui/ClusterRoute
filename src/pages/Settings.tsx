@@ -46,6 +46,7 @@ export default function Settings() {
       } else {
         throw new Error('Invalid response format');
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setTestStatus('error');
       setTestMessage(err.message || t('testKeyError', 'Failed to verify API key.'));
@@ -140,6 +141,7 @@ export default function Settings() {
             <Label className="text-sm">{t('parsingMode')}</Label>
             <select
               value={parsingMode}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               onChange={(e) => setParsingMode(e.target.value as any)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >

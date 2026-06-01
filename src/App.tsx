@@ -6,6 +6,7 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Settings from './pages/Settings';
 import About from './pages/About';
+import { Language } from './types';
 
 function App() {
   const { i18n } = useTranslation();
@@ -26,7 +27,7 @@ function App() {
   useEffect(() => {
     document.documentElement.dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = i18n.language;
-    useAppStore.getState().setLanguage(i18n.language as any);
+    useAppStore.getState().setLanguage(i18n.language as Language);
   }, [i18n.language]);
 
   useEffect(() => {

@@ -340,7 +340,7 @@ export default function Map({
                   rel="noopener noreferrer"
                   className="mt-2 block w-full text-center rounded bg-indigo-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
                 >
-                  Navigate
+                  {t('navigate')}
                 </a>
               </Popup>
             </Marker>
