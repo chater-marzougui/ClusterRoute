@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Settings as SettingsIcon, Info, Moon, Sun, Monitor, X } from 'lucide-react';
+import { Settings as SettingsIcon, Info, Moon, Sun, Monitor, X } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { Button } from './ui/button';
 import Settings from '../pages/Settings';
 import About from '../pages/About';
+import { Language } from '@/types';
 
 export default function Navbar() {
   const { t, i18n } = useTranslation();
@@ -13,7 +14,7 @@ export default function Navbar() {
   const [openModal, setOpenModal] = useState<'settings' | 'about' | null>(null);
 
   const openWith = (modal: 'settings' | 'about') => { setOpenModal(modal); setOverlayOpen(true); };
-  const closeModal = () => { setOpenModal(null); setOverlayOpen(false); };
+  const closeModal = useCallback(() => { setOpenModal(null); setOverlayOpen(false); }, [setOverlayOpen]);
 
   const cycleTheme = () => {
     if (theme === 'light') setTheme('dark');
@@ -27,7 +28,7 @@ export default function Navbar() {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal(); };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, []);
+  }, [closeModal]);
 
   return (
     <>
@@ -35,7 +36,7 @@ export default function Navbar() {
         <div className="container mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-1.5 text-primary font-bold text-lg shrink-0">
-            <MapPin className="h-5 w-5" />
+            <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-6 w-6 rounded object-contain" />
             <span className="hidden xs:inline">{t('appTitle')}</span>
           </Link>
 
@@ -48,7 +49,7 @@ export default function Navbar() {
             {/* Language select — compact */}
             <select
               value={i18n.language}
-              onChange={(e) => setLanguage(e.target.value as any)}
+              onChange={(e) => setLanguage(e.target.value as Language)}
               className="bg-transparent border border-input rounded-md px-1.5 py-1 text-xs outline-none focus:ring-2 focus:ring-ring text-foreground h-9"
             >
               <option value="en" className="bg-background">EN</option>
@@ -68,7 +69,7 @@ export default function Navbar() {
       </header>
 
       {openModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-200 flex items-center justify-center p-4">
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
           {/* Dialog — always centered, never a bottom sheet */}

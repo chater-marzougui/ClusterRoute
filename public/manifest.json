@@ -10,10 +10,10 @@
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "/ClusterRoute/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/ClusterRoute/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "categories": ["navigation", "travel", "utilities"]
