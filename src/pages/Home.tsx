@@ -151,7 +151,6 @@ export default function Home() {
         setIsLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [userLat, userLon, parsingMode, geminiApiKey, searchRadius, maxCandidates, isMobile, t]
   );
 
