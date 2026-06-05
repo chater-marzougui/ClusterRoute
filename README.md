@@ -1,61 +1,224 @@
-# ClusterRoute
+<a id="readme-top"></a>
 
-ClusterRoute is a premium, fully client-side web application that helps users find the optimal route through a cluster of nearby places. It uses OpenStreetMap (Overpass API) to fetch locations and offers dual-mode query parsing (Gemini Flash Lite or a robust local dictionary parser).
+---
 
-## Deliverables Status
-- ✅ Complete application
-- ✅ GitHub Actions workflow (`.github/workflows/deploy.yml`)
-- ✅ Environment documentation (Below)
-- ✅ Deployment instructions (Below)
-- ✅ Architecture diagram (Below)
-- ✅ Sample Screenshots section (Below)
+# 🛠️ ClusterRoute
 
-## Architecture Diagram
+**A privacy-first web app that builds the shortest multi-stop errand route near you.**  
+Built with ❤️ by <a href="https://github.com/chater-marzougui">Chater Marzougui</a>.
 
-```mermaid
-graph TD
-    User([User Query]) --> UI[React Frontend]
-    UI --> Store[(Zustand Local Storage)]
-    
-    UI --> Parser{Parser Mode}
-    Parser -- "Gemini Key" --> Gemini[Gemini API]
-    Parser -- "Local" --> Dictionary[Local Dictionary]
-    
-    Gemini --> Intents[Structured Intents]
-    Dictionary --> Intents
-    
-    Intents --> Overpass[Overpass API Service]
-    Overpass --> Places[OSM Places]
-    
-    Places --> Optimizer[Haversine Optimization]
-    Optimizer --> Routes[Top 5 Routes]
-    Routes --> Map[Leaflet Map UI]
-```
+<br>
+<div align="center">
+  <a href="https://github.com/chater-marzougui/ClusterRoute">
+    <img src="./public/favicon.png" alt="ClusterRoute Logo" width="140" height="140">
+  </a>
+  <h3>ClusterRoute</h3>
+  <p align="center">
+    <strong>Free-text place search, smart route optimization, and interactive map exploration — all in your browser.</strong>
+    <br>
+    <br>
+    <a href="https://github.com/chater-marzougui/ClusterRoute/issues/new?labels=bug">Report Bug</a>
+    ·
+    <a href="https://github.com/chater-marzougui/ClusterRoute/issues/new?labels=enhancement">Request Feature</a>
+  </p>
+</div>
 
-## Environment Documentation
-All environment configuration is managed strictly client-side via `localStorage`. No `.env` files are required for deployment.
-If you use the Gemini AI parser, input your API key on the `Settings` page. It will be stored securely in your browser's local storage.
+<br>
 
-## Deployment Instructions (GitHub Pages)
-1. Push this repository to GitHub (e.g., to a repository named `ClusterRoute`).
-2. Go to **Settings > Pages**.
-3. Change the **Source** to **GitHub Actions**.
-4. The included workflow (`.github/workflows/deploy.yml`) will automatically trigger on pushes to the `main` branch.
-5. Once deployed, the app uses `404.html` and Vite base path mapping to securely route SPA paths on GitHub Pages.
+---
 
-## Sample Screenshots
-*Add your images here:*
-- `Home Route:` ![Home Route](./public/screenshot1.png)
-- `Settings View:` ![Settings](./public/screenshot2.png)
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li><a href="#about-the-project">About The Project</a></li>
+    <li><a href="#-features">Features</a></li>
+    <li><a href="#-getting-started">Getting Started</a></li>
+    <li><a href="#-installation">Installation</a></li>
+    <li><a href="#-usage">Usage</a></li>
+    <li><a href="#-configuration">Configuration</a></li>
+    <li><a href="#-contributing">Contributing</a></li>
+    <li><a href="#-license">License</a></li>
+    <li><a href="#-contact">Contact</a></li>
+  </ol>
+</details>
 
-## Tech Stack
-- React 19, TypeScript, Vite
-- Tailwind CSS v4, shadcn/ui
-- Zustand, TanStack Query, React Router v6+
-- Leaflet, React-Leaflet, i18next (ar, en, fr)
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
 
-## Local Development
+---
+
+## About The Project
+
+**🚀 ClusterRoute** helps you type natural errands like `ATM, coffee, pharmacy` and instantly get optimized route options around your location.
+
+It uses:
+- **Photon geocoding** (OpenStreetMap ecosystem) with **Nominatim fallback**
+- **Dual parsing modes** (Gemini Flash Lite or local splitter)
+- **Client-side route scoring** using Haversine distance
+- **Interactive Leaflet maps** with route + candidate swapping
+
+Everything runs in the browser, with no backend required.
+
+## ✨ Features
+
+- 🔍 **Free-text multi-stop search** with progressive result loading
+- 🤖 **Flexible parsing** (`auto`, `gemini`, `local`) with optional Gemini API key
+- 🗺️ **Interactive map controls** (street/satellite/dark, locate, zoom)
+- 🔁 **Alternative stop swapping** directly from map popups or result cards
+- 📍 **Top route suggestions** with total distance + walk/drive estimates
+- 🌍 **Multilingual UI** (`en`, `fr`, `ar`) with RTL support
+- 🔒 **Privacy-first design**: settings and key stored locally via `localStorage`
+
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
+
+---
+
+## ⚡ Getting Started
+
+### Prerequisites
+
+- **Node.js** 20+
+- **npm** 10+
+- A modern browser with geolocation support
+- *(Optional)* Gemini API key for AI parsing mode
+
+### 📦 Installation
+
+1. Clone the repository
+2. Enter the project folder
+3. Install dependencies
+
 ```bash
-npm install
-npm run dev
+git clone https://github.com/chater-marzougui/ClusterRoute.git
+cd ClusterRoute
+npm ci
 ```
+
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
+
+---
+
+## 📚 Usage
+
+```bash
+# Start local development
+npm run dev
+
+# Build production bundle
+npm run build
+
+# Run tests
+npm run test
+
+# Run lint checks
+npm run lint
+```
+
+Once running, enter a query such as:
+- `ATM, coffee, pharmacy`
+- `bank then supermarket then gas station`
+
+Use **Settings** to tune parsing mode, search radius, max options per stop, and distance unit.
+
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
+
+---
+
+## 🪛 Configuration
+
+ClusterRoute is fully client-side. No `.env` file is required.
+
+### In-app Settings
+
+- **Parsing Mode**: `auto` / `gemini` / `local`
+- **Gemini API Key**: optional; stored locally in browser storage
+- **Search Radius**: 1–50 km
+- **Max Options per Stop**: 3–20
+- **Distance Unit**: km / miles
+- **Theme**: light / dark / system
+- **Language**: EN / FR / AR
+
+### Local Storage Keys
+
+- `clusterroute-settings`
+- `clusterroute-history`
+
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
+
+---
+
+## 🤝 Contributing
+
+Contributions are what make the open-source community amazing — any contribution is appreciated.
+
+1. **Fork the Project**
+2. **Create your Feature Branch** (`git checkout -b feature/AmazingFeature`)
+3. **Commit your Changes** (`git commit -m 'Add some AmazingFeature'`)
+4. **Push to the Branch**
+5. **Open a Pull Request**
+
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
+
+---
+
+## 📃 License
+
+Distributed under the **MIT License**. See `LICENSE` for more information.
+
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
+
+---
+
+## 📧 Contact
+
+**Chater Marzougui**  
+GitHub: [@chater-marzougui](https://github.com/chater-marzougui)
+
+Project Link: https://github.com/chater-marzougui/ClusterRoute
+
+---
+
+## 🙏 Acknowledgments
+
+- OpenStreetMap contributors
+- Photon (komoot)
+- Nominatim
+- Google Gemini API
+- React, Vite, Tailwind, Leaflet communities
+
+<div align="right">
+  <a href="#readme-top">
+    <img src="https://img.shields.io/badge/Back_to_Top-⬆️-blue?style=for-the-badge" alt="Back to Top">
+  </a>
+</div>
+
+---
+
+ClusterRoute makes multi-stop planning simple: type naturally, compare routes, and move faster.
